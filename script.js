@@ -12,8 +12,9 @@
 // ─────────────────────────────────────────────
 const BIT_RATE_MS = 300;     // milliseconds per bit
 const PREAMBLE = "101011";
-const POSTAMBLE = "00000011"; // 8-bit ETX (End of Text) byte
+const POSTAMBLE = "11111111"; // Distinctive marker (255) - unlikely to appear in normal text
 const SPACE_PLACEHOLDER = "~"; // Safe placeholder for spaces during transmission
+const MIN_MESSAGE_BITS = 8;    // Minimum 1 character for a valid message
 const THRESHOLD_OFFSET = 30;      // brightness units above ambient to call a "1"
 const CALIB_DURATION_MS = 2000;    // how long to measure ambient during calibration
 const ROI_SIZE = 50;      // pixels — size of the "Target Box" sample region
@@ -748,16 +749,15 @@ function processBit(bit) {
 
     // ── ROBUST POSTAMBLE DETECTION ──
     // Only check for postamble at byte boundaries (multiples of 8 bits)
-    // This prevents false positives from random bit sequences in the middle of data
-    if (rxBitBuffer.length >= POSTAMBLE.length && rxBitBuffer.length % 8 === 0) {
+    // Require minimum message length to prevent premature termination
+    if (rxBitBuffer.length >= MIN_MESSAGE_BITS + POSTAMBLE.length && rxBitBuffer.length % 8 === 0) {
       const tail = rxBitBuffer.slice(-POSTAMBLE.length).join("");
       if (tail === POSTAMBLE) {
         clearInterval(sampleInterval);
         const payloadBits = rxBitBuffer
           .slice(0, rxBitBuffer.length - POSTAMBLE.length)
           .join("");
-        log("rx-log", `★ POSTAMBLE DETECTED [${POSTAMBLE}] — exact match at byte boundary`, "ok");
-        log("rx-log", `Payload: ${payloadBits.length} bits (${Math.floor(payloadBits.length / 8)} bytes)`, "ok");
+        log("rx-log", `★ POSTAMBLE DETECTED [${POSTAMBLE}] — exact match (${payloadBits.length} bits data)`, "ok");
         decodePayload(payloadBits);
 
         setRxState("COMPLETE");
@@ -778,41 +778,9 @@ function processBit(bit) {
         }, 3000);
         return;
       }
-
-      // Fuzzy match — allow 1-bit error at byte boundaries
-      const tail_fuzzy = rxBitBuffer.slice(-POSTAMBLE.length).join("");
-      let mismatches = 0;
-      for (let i = 0; i < POSTAMBLE.length; i++) {
-        if (tail_fuzzy[i] !== POSTAMBLE[i]) mismatches++;
-      }
-      if (mismatches === 1) {
-        clearInterval(sampleInterval);
-        const payloadBits = rxBitBuffer
-          .slice(0, rxBitBuffer.length - POSTAMBLE.length)
-          .join("");
-        log("rx-log", `★ POSTAMBLE DETECTED [${tail_fuzzy}] — fuzzy match (1-bit error) at byte boundary`, "ok");
-        log("rx-log", `Payload: ${payloadBits.length} bits (${Math.floor(payloadBits.length / 8)} bytes)`, "ok");
-        decodePayload(payloadBits);
-
-        setRxState("COMPLETE");
-        reticleBox.classList.remove("locked");
-        rxBitBuffer = [];
-        preambleWindow = [];
-        log("rx-log", "✓ Transmission complete (fuzzy postamble).", "ok");
-        updateBanner("complete", "✓ MESSAGE RECEIVED", "✓");
-
-        setTimeout(() => {
-          if (rxState === "COMPLETE") {
-            setRxState("SCANNING");
-            updateBanner("scanning", "SCANNING FOR PREAMBLE PATTERN [101011]...", "◎");
-            log("rx-log", "Auto-resumed scanning for next message.", "info");
-          }
-        }, 3000);
-        return;
-      }
     }
 
-    // Strategy 3: Silence detection — if we see 10+ zeros in a row at/near a byte boundary, sender has stopped
+    // Strategy 2: Silence detection — if we see 16+ zeros in a row at a byte boundary, sender has stopped
     // Only check after receiving at least a full byte and be at a byte boundary
     if (rxBitBuffer.length >= 18 && rxBitBuffer.length % 8 === 0) {
       const lastTen = rxBitBuffer.slice(-10).join("");
@@ -900,15 +868,15 @@ function decodePayload(bits) {
     const charCode = parseInt(byte, 2);
     charCodes.push({ byte, charCode, char: String.fromCharCode(charCode) });
 
-    // Accept printable ASCII (including space!) and common control characters
+    // Accept printable ASCII and common control characters
+    // Skip null bytes (0) and postamble marker (255)
     if ((charCode >= 32 && charCode <= 126) || charCode === 10 || charCode === 13 || charCode === 9) {
       text += String.fromCharCode(charCode);
       validCharCount++;
-    } else if (charCode === 0) {
-      // Stop at null terminator if present
-      break;
+    } else if (charCode === 0 || charCode === 255) {
+      // Skip null bytes and postamble markers - don't add to text, don't break
     } else {
-      // For non-printable, show what it is
+      // For other non-printable, show what it is
       text += `[${charCode}]`;
     }
   }
