@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>LI-FI // OWC TERMINAL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="scanlines"></div>
+
+  <div id="boot-screen">
+    <div class="boot-logo">
+      <span class="boot-title">LI-FI</span>
+      <span class="boot-sub">OPTICAL WIRELESS COMMUNICATION TERMINAL</span>
+      <div class="boot-bar-wrap">
+        <div class="boot-bar" id="boot-bar"></div>
+      </div>
+      <span class="boot-status" id="boot-status">INITIALIZING...</span>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+
+    <header class="app-header">
+      <div class="header-left">
+        <span class="logo-text">LI-FI</span>
+        <span class="logo-tag">OWC v1.0</span>
+      </div>
+      <div class="mode-toggle">
+        <button id="btn-sender" class="mode-btn active" data-mode="sender">⟶ SENDER</button>
+        <button id="btn-receiver" class="mode-btn" data-mode="receiver">⟵ RECEIVER</button>
+      </div>
+      <div class="header-right">
+        <span class="signal-dot" id="signal-dot"></span>
+        <span class="signal-label" id="signal-label">IDLE</span>
+      </div>
+    </header>
+
+    <section id="panel-sender" class="panel active">
+      <div class="panel-grid">
+
+        <div class="sender-controls">
+          <div class="section-label">// INPUT MESSAGE</div>
+          <div class="input-wrap">
+            <textarea id="sender-input" placeholder="Type your message here..." maxlength="128"></textarea>
+            <button id="btn-mic" class="mic-btn" title="Voice Input">🎤</button>
+          </div>
+          <div class="char-count"><span id="char-count">0</span>/128</div>
+
+          <div class="section-label">// BINARY PAYLOAD</div>
+          <div id="binary-display" class="binary-display">
+            <span class="dim">Binary output will appear here...</span>
+          </div>
+
+          <div class="section-label">// PROTOCOL FRAME</div>
+          <div id="frame-display" class="frame-display">
+            <span class="preamble-label">PREAMBLE</span>
+            <span id="frame-preamble" class="frame-preamble">101011</span>
+            <span class="data-label">DATA</span>
+            <span id="frame-data" class="frame-data dim">—</span>
+            <span class="postamble-label">POSTAMBLE</span>
+            <span id="frame-postamble" class="frame-postamble">00000011</span>
+          </div>
+
+          <div class="btn-row">
+            <button id="btn-convert" class="action-btn secondary">ENCODE</button>
+            <button id="btn-transmit" class="action-btn primary" disabled>TRANSMIT</button>
+          </div>
+        </div>
+
+        <div class="sender-visual">
+          <div class="section-label">// SIGNAL INDICATOR</div>
+          <div class="flashlight-indicator-wrap">
+            <div class="flashlight-indicator" id="flashlight-indicator">
+              <div class="indicator-core" id="indicator-core"></div>
+              <div class="indicator-ring ring1"></div>
+              <div class="indicator-ring ring2"></div>
+            </div>
+            <div class="indicator-state" id="indicator-state">STANDBY</div>
+          </div>
+
+          <div class="section-label" style="margin-top:24px">// TRANSMISSION LOG</div>
+          <div class="tx-log" id="tx-log">
+            <div class="log-entry dim">Awaiting transmission...</div>
+          </div>
+
+          <div class="progress-wrap hidden" id="progress-wrap">
+            <div class="progress-label">
+              <span id="progress-bit">BIT 0/0</span>
+              <span id="progress-pct">0%</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="progress-fill"></div>
+            </div>
+          </div>
+
+          <div id="screen-flash" class="screen-flash hidden"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="panel-receiver" class="panel hidden">
+
+      <div id="rx-status-banner" class="rx-status-banner idle">
+        <span class="rx-banner-icon" id="rx-banner-icon">◉</span>
+        <span class="rx-banner-text" id="rx-banner-text">RECEIVER IDLE — PRESS START</span>
+      </div>
+
+      <div class="panel-grid receiver-grid">
+
+        <div class="receiver-video-col">
+          <div class="section-label">// OPTICAL SENSOR FEED</div>
+          <div class="video-wrap" id="video-wrap">
+            <video id="receiver-video" autoplay muted playsinline></video>
+            <canvas id="hidden-canvas" class="hidden-canvas"></canvas>
+
+            <div class="reticle-overlay" id="reticle-overlay">
+              <div class="reticle-box" id="reticle-box">
+                <span class="reticle-corner tl"></span>
+                <span class="reticle-corner tr"></span>
+                <span class="reticle-corner bl"></span>
+                <span class="reticle-corner br"></span>
+              </div>
+              <div class="reticle-label">ALIGN FLASHLIGHT INSIDE BOX</div>
+            </div>
+
+            <div class="rx-state-badge" id="rx-state-badge">IDLE</div>
+          </div>
+
+          <div class="btn-row" style="margin-top:12px">
+            <button id="btn-calibrate" class="action-btn secondary">CALIBRATE</button>
+            <button id="btn-rx-start" class="action-btn primary">START RECEIVER</button>
+            <button id="btn-rx-stop" class="action-btn danger hidden">STOP</button>
+          </div>
+        </div>
+
+        <div class="receiver-data-col">
+          <div class="section-label">// BRIGHTNESS SIGNAL (LIVE)</div>
+          <canvas id="graph-canvas" class="graph-canvas"></canvas>
+
+          <div class="rx-stats">
+            <div class="stat-box">
+              <span class="stat-label">THRESHOLD</span>
+              <span class="stat-val" id="stat-threshold">—</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">CURRENT</span>
+              <span class="stat-val" id="stat-current">—</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">STATE</span>
+              <span class="stat-val" id="stat-state">IDLE</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">BITS RX</span>
+              <span class="stat-val" id="stat-bits">0</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">CONFIDENCE</span>
+              <span class="stat-val" id="stat-confidence">—</span>
+            </div>
+          </div>
+
+          <div class="section-label">// DECODED BITS BUFFER</div>
+          <div class="bit-buffer" id="bit-buffer">
+            <span class="dim">—</span>
+          </div>
+
+          <div class="section-label">// LIVE DECODE PREVIEW</div>
+          <div class="live-decode-wrap">
+            <div class="live-decode" id="live-decode">
+              <span class="dim">Characters appear as bits are received...</span>
+            </div>
+            <div class="live-decode-info">
+              <span id="live-chars-count">0 chars</span>
+              <span id="live-bits-progress">next char: 0/8 bits</span>
+            </div>
+          </div>
+
+          <div class="section-label" style="display:flex;justify-content:space-between;align-items:center">
+            <span>// DECODED MESSAGE</span>
+            <label class="tts-toggle" title="Read aloud on receive">
+              <input type="checkbox" id="tts-enabled" checked />
+              <span class="tts-label">🔊 TTS</span>
+            </label>
+          </div>
+          <div class="decoded-output" id="decoded-output">
+            <span class="dim">Waiting for signal...</span>
+          </div>
+
+          <div class="section-label" style="margin-top:12px">// MESSAGE HISTORY</div>
+          <div class="message-history" id="message-history">
+            <div class="dim">No messages received yet.</div>
+          </div>
+
+          <div class="section-label" style="margin-top:16px">// RECEIVE LOG</div>
+          <div class="tx-log" id="rx-log">
+            <div class="log-entry dim">Receiver not started.</div>
+          </div>
+
+          <div class="section-label"
+            style="margin-top:12px;display:flex;justify-content:space-between;align-items:center">
+            <span>// OVERSAMPLING DEBUGGER</span>
+            <label class="tts-toggle">
+              <input type="checkbox" id="debug-enabled" />
+              <span class="tts-label">🔍 DEBUG</span>
+            </label>
+          </div>
+          <div id="debug-panel" class="debug-panel hidden">
+            <div class="debug-stats">
+              <div class="debug-stat">
+                <span class="debug-label">SAMPLES</span>
+                <span class="debug-val" id="dbg-samples">0</span>
+              </div>
+              <div class="debug-stat">
+                <span class="debug-label">MEDIAN</span>
+                <span class="debug-val" id="dbg-median">—</span>
+              </div>
+              <div class="debug-stat">
+                <span class="debug-label">THRESHOLD</span>
+                <span class="debug-val" id="dbg-threshold">—</span>
+              </div>
+              <div class="debug-stat">
+                <span class="debug-label">BIT</span>
+                <span class="debug-val" id="dbg-bit">—</span>
+              </div>
+            </div>
+            <div class="debug-sample-bar-wrap">
+              <div class="debug-sample-bar" id="dbg-bar"></div>
+              <div class="debug-threshold-line" id="dbg-thresh-line"></div>
+            </div>
+            <div class="debug-log" id="debug-log">
+              <span class="dim">Bit decisions will appear here...</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </div>
+  <script src="script.js"></script>
+</body>
+
+</html>
