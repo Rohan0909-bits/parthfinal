@@ -13,6 +13,7 @@
 const BIT_RATE_MS = 300;     // milliseconds per bit
 const PREAMBLE = "101011";
 const POSTAMBLE = "00000011"; // 8-bit ETX (End of Text) byte
+const SPACE_PLACEHOLDER = "~"; // Safe placeholder for spaces during transmission
 const THRESHOLD_OFFSET = 30;      // brightness units above ambient to call a "1"
 const CALIB_DURATION_MS = 2000;    // how long to measure ambient during calibration
 const ROI_SIZE = 50;      // pixels — size of the "Target Box" sample region
@@ -84,9 +85,12 @@ function sleep(ms) {
 
 /** Convert a string to its ASCII binary representation.
  * Each character → 8-bit padded binary string.
+ * Spaces are replaced with placeholder to avoid transmission issues.
  */
 function textToBinary(text) {
-  return text.split("").map(ch =>
+  // Replace spaces with placeholder character for safe transmission
+  const encodedText = text.replace(/ /g, SPACE_PLACEHOLDER);
+  return encodedText.split("").map(ch =>
     ch.charCodeAt(0).toString(2).padStart(8, "0")
   ).join("");
 }
@@ -747,18 +751,12 @@ function processBit(bit) {
     // This prevents false positives from random bit sequences in the middle of data
     if (rxBitBuffer.length >= POSTAMBLE.length && rxBitBuffer.length % 8 === 0) {
       const tail = rxBitBuffer.slice(-POSTAMBLE.length).join("");
-      // Log every byte boundary check for debugging
-      const byteNum = Math.floor(rxBitBuffer.length / 8);
-      if (rxBitBuffer.length % 16 === 0) { // Log every 2 bytes to reduce spam
-        log("rx-log", `[DEBUG] Byte boundary ${byteNum}: last 8 bits = "${tail}"`, "info");
-      }
       if (tail === POSTAMBLE) {
         clearInterval(sampleInterval);
         const payloadBits = rxBitBuffer
           .slice(0, rxBitBuffer.length - POSTAMBLE.length)
           .join("");
-        log("rx-log", `★ POSTAMBLE DETECTED [${POSTAMBLE}] — exact match at byte boundary ${byteNum}, position ${rxBitBuffer.length - POSTAMBLE.length}`, "ok");
-        log("rx-log", `Full buffer (${rxBitBuffer.length} bits): ${rxBitBuffer.join("")}`, "ok");
+        log("rx-log", `★ POSTAMBLE DETECTED [${POSTAMBLE}] — exact match at byte boundary`, "ok");
         log("rx-log", `Payload: ${payloadBits.length} bits (${Math.floor(payloadBits.length / 8)} bytes)`, "ok");
         decodePayload(payloadBits);
 
@@ -860,8 +858,10 @@ function updateLiveDecode() {
     const byte = rxBitBuffer.slice(i * 8, (i + 1) * 8).join("");
     const charCode = parseInt(byte, 2);
     // Show printable ASCII including spaces (32-126) normally, use dot for others
+    const char = String.fromCharCode(charCode);
     if (charCode >= 32 && charCode <= 126) {
-      decodedSoFar += String.fromCharCode(charCode);
+      // Replace placeholder with space for display
+      decodedSoFar += (char === SPACE_PLACEHOLDER) ? " " : char;
     } else if (charCode === 9) {
       decodedSoFar += "→"; // Tab
     } else if (charCode === 10) {
@@ -922,6 +922,9 @@ function decodePayload(bits) {
   // Clean up text - remove any [...] markers for non-printable if they weren't useful
   text = text.replace(/\s+$/g, ""); // Only trim trailing whitespace at very end
   text = text.replace(/[\x00-\x08\x0e-\x1f\x7f]*$/g, ""); // Remove trailing control chars
+
+  // Restore spaces from placeholder character
+  text = text.replace(new RegExp(SPACE_PLACEHOLDER, "g"), " ");
 
   if (validCharCount === 0) {
     log("rx-log", "✗ No valid characters in standard alignment. Check received bits.", "err");
