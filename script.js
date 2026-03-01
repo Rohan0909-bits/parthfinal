@@ -752,12 +752,15 @@ function processBit(bit) {
     // Require minimum message length to prevent premature termination
     if (rxBitBuffer.length >= MIN_MESSAGE_BITS + POSTAMBLE.length && rxBitBuffer.length % 8 === 0) {
       const tail = rxBitBuffer.slice(-POSTAMBLE.length).join("");
-      if (tail === POSTAMBLE) {
+      const hammingDistance = (a, b) => a.split('').reduce((acc, bit, i) => acc + (bit !== b[i] ? 1 : 0), 0);
+      const distance = hammingDistance(tail, POSTAMBLE);
+
+      if (distance <= 2) { // Allow up to 2 bit errors
         clearInterval(sampleInterval);
         const payloadBits = rxBitBuffer
           .slice(0, rxBitBuffer.length - POSTAMBLE.length)
           .join("");
-        log("rx-log", `★ POSTAMBLE DETECTED [${POSTAMBLE}] — exact match (${payloadBits.length} bits data)`, "ok");
+        log("rx-log", `★ POSTAMBLE DETECTED [${POSTAMBLE}] with Hamming distance ${distance} — ${payloadBits.length} bits data`, "ok");
         decodePayload(payloadBits);
 
         setRxState("COMPLETE");
@@ -767,7 +770,6 @@ function processBit(bit) {
         log("rx-log", "✓ Transmission complete. Receiver auto-stopped.", "ok");
         updateBanner("complete", "✓ MESSAGE RECEIVED", "✓");
 
-        // Reset for next message
         setTimeout(() => {
           if (rxState === "COMPLETE") {
             setRxState("SCANNING");
@@ -780,16 +782,13 @@ function processBit(bit) {
       }
     }
 
-    // Strategy 2: Silence detection — if we see 16+ zeros in a row at a byte boundary, sender has stopped
-    // Only check after receiving at least a full byte and be at a byte boundary
+    // Improved silence detection
     if (rxBitBuffer.length >= 18 && rxBitBuffer.length % 8 === 0) {
       const lastTen = rxBitBuffer.slice(-10).join("");
       if (lastTen === "0000000000" && rxBitBuffer.length > POSTAMBLE.length) {
         clearInterval(sampleInterval);
-        // Strip trailing zeros (silence) to find payload
         let endIdx = rxBitBuffer.length;
         while (endIdx > 0 && rxBitBuffer[endIdx - 1] === "0") endIdx--;
-        // Round down to nearest byte boundary to avoid partial characters
         endIdx = Math.floor(endIdx / 8) * 8;
         const payloadBits = rxBitBuffer.slice(0, endIdx).join("");
         log("rx-log", `⚠ SILENCE DETECTED — 10+ zeros at byte boundary. Auto-decoding ${payloadBits.length} bits`, "err");
