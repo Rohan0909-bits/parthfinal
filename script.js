@@ -743,15 +743,16 @@ function processBit(bit) {
       "●");
 
     // ── ROBUST POSTAMBLE DETECTION ──
-    // Strategy 1: Exact match (sliding window, not just byte-aligned)
-    if (rxBitBuffer.length >= POSTAMBLE.length) {
+    // Only check for postamble at byte boundaries (multiples of 8 bits)
+    // This prevents false positives from random bit sequences in the middle of data
+    if (rxBitBuffer.length >= POSTAMBLE.length && rxBitBuffer.length % 8 === 0) {
       const tail = rxBitBuffer.slice(-POSTAMBLE.length).join("");
       if (tail === POSTAMBLE) {
         clearInterval(sampleInterval);
         const payloadBits = rxBitBuffer
           .slice(0, rxBitBuffer.length - POSTAMBLE.length)
           .join("");
-        log("rx-log", `★ POSTAMBLE DETECTED [${POSTAMBLE}] — exact match at position ${rxBitBuffer.length - POSTAMBLE.length}`, "ok");
+        log("rx-log", `★ POSTAMBLE DETECTED [${POSTAMBLE}] — exact match at byte boundary, position ${rxBitBuffer.length - POSTAMBLE.length}`, "ok");
         log("rx-log", `Payload: ${payloadBits.length} bits (${Math.floor(payloadBits.length / 8)} bytes)`, "ok");
         decodePayload(payloadBits);
 
@@ -773,21 +774,19 @@ function processBit(bit) {
         }, 3000);
         return;
       }
-    }
 
-    // Strategy 2: Fuzzy match — allow 1-bit error at byte boundaries
-    if (rxBitBuffer.length >= POSTAMBLE.length && rxBitBuffer.length % 8 === 0) {
-      const tail = rxBitBuffer.slice(-POSTAMBLE.length).join("");
+      // Fuzzy match — allow 1-bit error at byte boundaries
+      const tail_fuzzy = rxBitBuffer.slice(-POSTAMBLE.length).join("");
       let mismatches = 0;
       for (let i = 0; i < POSTAMBLE.length; i++) {
-        if (tail[i] !== POSTAMBLE[i]) mismatches++;
+        if (tail_fuzzy[i] !== POSTAMBLE[i]) mismatches++;
       }
       if (mismatches === 1) {
         clearInterval(sampleInterval);
         const payloadBits = rxBitBuffer
           .slice(0, rxBitBuffer.length - POSTAMBLE.length)
           .join("");
-        log("rx-log", `★ POSTAMBLE DETECTED [${tail}] — fuzzy match (1-bit error) at byte boundary`, "ok");
+        log("rx-log", `★ POSTAMBLE DETECTED [${tail_fuzzy}] — fuzzy match (1-bit error) at byte boundary`, "ok");
         log("rx-log", `Payload: ${payloadBits.length} bits (${Math.floor(payloadBits.length / 8)} bytes)`, "ok");
         decodePayload(payloadBits);
 
@@ -809,16 +808,19 @@ function processBit(bit) {
       }
     }
 
-    // Strategy 3: Silence detection — if we see 10+ zeros in a row, sender has stopped
-    if (rxBitBuffer.length >= 10) {
+    // Strategy 3: Silence detection — if we see 10+ zeros in a row at/near a byte boundary, sender has stopped
+    // Only check after receiving at least a full byte and be at a byte boundary
+    if (rxBitBuffer.length >= 18 && rxBitBuffer.length % 8 === 0) {
       const lastTen = rxBitBuffer.slice(-10).join("");
       if (lastTen === "0000000000" && rxBitBuffer.length > POSTAMBLE.length) {
         clearInterval(sampleInterval);
         // Strip trailing zeros (silence) to find payload
         let endIdx = rxBitBuffer.length;
         while (endIdx > 0 && rxBitBuffer[endIdx - 1] === "0") endIdx--;
+        // Round down to nearest byte boundary to avoid partial characters
+        endIdx = Math.floor(endIdx / 8) * 8;
         const payloadBits = rxBitBuffer.slice(0, endIdx).join("");
-        log("rx-log", `⚠ SILENCE DETECTED — 10+ zeros. Auto-decoding ${payloadBits.length} bits`, "err");
+        log("rx-log", `⚠ SILENCE DETECTED — 10+ zeros at byte boundary. Auto-decoding ${payloadBits.length} bits`, "err");
         if (payloadBits.length >= 8) {
           decodePayload(payloadBits);
         }
