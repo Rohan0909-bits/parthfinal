@@ -890,8 +890,10 @@ function decodePayload(bits) {
   text = text.replace(/\s+$/g, ""); // Only trim trailing whitespace at very end
   text = text.replace(/[\x00-\x08\x0e-\x1f\x7f]*$/g, ""); // Remove trailing control chars
 
-  // Restore spaces from placeholder character
+  // Ensure spaces are correctly restored from placeholder
+  log("rx-log", `[DEBUG] Replacing placeholder '${SPACE_PLACEHOLDER}' with spaces...`, "info");
   text = text.replace(new RegExp(SPACE_PLACEHOLDER, "g"), " ");
+  log("rx-log", `[DEBUG] Decoded text after space replacement: "${text}"`, "info");
 
   if (validCharCount === 0) {
     log("rx-log", "✗ No valid characters in standard alignment. Check received bits.", "err");
