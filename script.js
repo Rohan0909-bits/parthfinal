@@ -747,12 +747,18 @@ function processBit(bit) {
     // This prevents false positives from random bit sequences in the middle of data
     if (rxBitBuffer.length >= POSTAMBLE.length && rxBitBuffer.length % 8 === 0) {
       const tail = rxBitBuffer.slice(-POSTAMBLE.length).join("");
+      // Log every byte boundary check for debugging
+      const byteNum = Math.floor(rxBitBuffer.length / 8);
+      if (rxBitBuffer.length % 16 === 0) { // Log every 2 bytes to reduce spam
+        log("rx-log", `[DEBUG] Byte boundary ${byteNum}: last 8 bits = "${tail}"`, "info");
+      }
       if (tail === POSTAMBLE) {
         clearInterval(sampleInterval);
         const payloadBits = rxBitBuffer
           .slice(0, rxBitBuffer.length - POSTAMBLE.length)
           .join("");
-        log("rx-log", `★ POSTAMBLE DETECTED [${POSTAMBLE}] — exact match at byte boundary, position ${rxBitBuffer.length - POSTAMBLE.length}`, "ok");
+        log("rx-log", `★ POSTAMBLE DETECTED [${POSTAMBLE}] — exact match at byte boundary ${byteNum}, position ${rxBitBuffer.length - POSTAMBLE.length}`, "ok");
+        log("rx-log", `Full buffer (${rxBitBuffer.length} bits): ${rxBitBuffer.join("")}`, "ok");
         log("rx-log", `Payload: ${payloadBits.length} bits (${Math.floor(payloadBits.length / 8)} bytes)`, "ok");
         decodePayload(payloadBits);
 
